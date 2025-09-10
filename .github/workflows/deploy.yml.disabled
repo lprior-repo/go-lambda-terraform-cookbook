@@ -12,7 +12,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.23.1'
   TERRAFORM_VERSION: '1.13.1'
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Cache Go modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/go-build
@@ -107,10 +107,6 @@ jobs:
       (matrix.environment == 'prod' && github.ref == 'refs/heads/main') ||
       github.event_name == 'pull_request'
 
-    outputs:
-      tfplan-dev: ${{ steps.plan-dev.outputs.stdout }}
-      tfplan-staging: ${{ steps.plan-staging.outputs.stdout }}
-      tfplan-prod: ${{ steps.plan-prod.outputs.stdout }}
 
     steps:
       - name: Checkout code
@@ -144,7 +140,7 @@ jobs:
           terraform workspace select ${{ matrix.environment }} || terraform workspace new ${{ matrix.environment }}
 
       - name: Terraform Plan
-        id: plan-${{ matrix.environment }}
+        id: terraform-plan
         working-directory: ./terraform
         run: |
           terraform plan \
@@ -165,7 +161,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const { stdout } = ${{ steps[format('plan-{0}', matrix.environment)].outputs }};
+            const stdout = '${{ steps.terraform-plan.outputs.stdout }}';
             
             const comment = `## Terraform Plan Results - ${{ matrix.environment }}
             
@@ -190,7 +186,6 @@ jobs:
     name: Deploy to AWS
     runs-on: ubuntu-latest
     needs: [terraform-plan]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     strategy:
       matrix:
         environment: [dev, staging, prod]
