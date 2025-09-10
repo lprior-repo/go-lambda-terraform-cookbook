@@ -1,0 +1,11 @@
+# Example bootstrap variables file
+# Copy this file to terraform.tfvars and customize the values
+
+# Project configuration
+project_name = "go-lambda-terraform-cookbook"
+
+# AWS configuration
+aws_region = "us-east-1"
+
+# GitHub repository (REQUIRED)
+github_repository = "YOUR_GITHUB_USERNAME/go-lambda-terraform-cookbook"
