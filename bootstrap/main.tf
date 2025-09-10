@@ -16,22 +16,22 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = var.project_name
-      ManagedBy   = "terraform"
-      Purpose     = "bootstrap"
+      Project   = var.project_name
+      ManagedBy = "terraform"
+      Purpose   = "bootstrap"
     }
   }
 }
 
 locals {
   # GitHub repository details
-  github_org      = split("/", var.github_repository)[0]
-  github_repo     = split("/", var.github_repository)[1]
-  
+  github_org  = split("/", var.github_repository)[0]
+  github_repo = split("/", var.github_repository)[1]
+
   common_tags = {
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-    Purpose     = "bootstrap"
+    Project   = var.project_name
+    ManagedBy = "terraform"
+    Purpose   = "bootstrap"
   }
 }
 
@@ -53,7 +53,7 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 
 # S3 bucket for Terraform state
 resource "aws_s3_bucket" "terraform_state" {
-  bucket        = "${var.project_name}-terraform-state-${var.aws_region}-${random_string.bucket_suffix.result}"
+  bucket              = "${var.project_name}-terraform-state-${var.aws_region}-${random_string.bucket_suffix.result}"
   object_lock_enabled = true
 
   tags = local.common_tags
@@ -115,7 +115,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "terraform_state_lifecycle" {
 # S3 object locking for Terraform state (instead of DynamoDB)
 resource "aws_s3_bucket_object_lock_configuration" "terraform_state_lock" {
   depends_on = [aws_s3_bucket_versioning.terraform_state_versioning]
-  
+
   bucket = aws_s3_bucket.terraform_state.id
 
   rule {

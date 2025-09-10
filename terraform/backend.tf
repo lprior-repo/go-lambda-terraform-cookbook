@@ -6,7 +6,7 @@ terraform {
     # bucket = "REPLACE_WITH_ACTUAL_BUCKET_NAME"  # Update after running bootstrap
     # key    = "terraform.tfstate"
     # region = "us-east-1"
-    
+
     # Uncomment the lines above and replace REPLACE_WITH_ACTUAL_BUCKET_NAME 
     # with the actual bucket name from the bootstrap output
   }

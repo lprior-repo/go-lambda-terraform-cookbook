@@ -26,13 +26,13 @@ output "github_actions_role_staging_arn" {
 }
 
 output "github_actions_role_prod_arn" {
-  description = "ARN of the GitHub Actions role for production" 
+  description = "ARN of the GitHub Actions role for production"
   value       = aws_iam_role.github_actions_prod.arn
 }
 
 output "setup_commands" {
   description = "Commands to run after bootstrap deployment"
-  value = <<-EOT
+  value       = <<-EOT
     # Update your Terraform backend configuration:
     # Add this to your terraform/backend.tf file:
     

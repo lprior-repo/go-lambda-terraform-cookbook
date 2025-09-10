@@ -1,6 +1,6 @@
 # Go Lambda Terraform Cookbook - Makefile
 
-.PHONY: help build test clean sam-build sam-invoke sam-api terraform-init terraform-plan terraform-apply terraform-destroy lint format
+.PHONY: help build test clean sam-build sam-invoke sam-api terraform-init terraform-plan terraform-apply terraform-destroy lint fmt
 
 # Variables
 GO_VERSION = 1.25
@@ -40,10 +40,13 @@ lint: ## Run Go linting
 		exit 1; \
 	fi
 
-format: ## Format Go code
+fmt: ## Format Go and Terraform code
 	@echo "Formatting Go code..."
 	@gofmt -s -w .
 	@go mod tidy
+	@echo "Formatting Terraform code..."
+	@cd terraform && terraform fmt -recursive
+	@cd bootstrap && terraform fmt -recursive
 
 clean: ## Clean build artifacts
 	@echo "Cleaning up..."
