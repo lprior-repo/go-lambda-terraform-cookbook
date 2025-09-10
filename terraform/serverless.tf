@@ -157,7 +157,7 @@ resource "aws_lambda_function" "main" {
   role          = aws_iam_role.lambda_role.arn
   handler       = "bootstrap"
   runtime       = "provided.al2023"
-  architecture  = ["arm64"]
+  architectures = ["arm64"]
 
   s3_bucket = aws_s3_bucket.lambda_artifacts.bucket
   s3_key    = aws_s3_object.lambda_package.key
