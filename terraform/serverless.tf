@@ -14,7 +14,7 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-  
+
   default_tags {
     tags = {
       Project     = var.project_name
@@ -26,7 +26,7 @@ provider "aws" {
 
 locals {
   function_name = "${var.project_name}-${var.environment}"
-  
+
   common_tags = {
     Project     = var.project_name
     Environment = var.environment
@@ -76,7 +76,7 @@ resource "aws_s3_bucket_public_access_block" "lambda_artifacts_pab" {
 data "archive_file" "lambda_zip" {
   type        = "zip"
   output_path = "${path.module}/../build/function.zip"
-  
+
   dynamic "source" {
     for_each = var.lambda_zip_path != "" ? [1] : []
     content {
@@ -84,7 +84,7 @@ data "archive_file" "lambda_zip" {
       filename = "bootstrap"
     }
   }
-  
+
   depends_on = [null_resource.build_lambda]
 }
 
@@ -154,14 +154,14 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 # Lambda function
 resource "aws_lambda_function" "main" {
   function_name = local.function_name
-  role         = aws_iam_role.lambda_role.arn
-  handler      = "bootstrap"
-  runtime      = "provided.al2023"
-  architecture = ["arm64"]
-  
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "bootstrap"
+  runtime       = "provided.al2023"
+  architecture  = ["arm64"]
+
   s3_bucket = aws_s3_bucket.lambda_artifacts.bucket
   s3_key    = aws_s3_object.lambda_package.key
-  
+
   timeout     = var.lambda_timeout
   memory_size = var.lambda_memory_size
 
@@ -276,17 +276,17 @@ resource "aws_api_gateway_stage" "main" {
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway_logs.arn
     format = jsonencode({
-      requestId      = "$requestId"
-      ip             = "$requestId"
-      caller         = "$context.identity.caller"
-      user           = "$context.identity.user"
-      requestTime    = "$requestTime"
-      httpMethod     = "$httpMethod"
-      resourcePath   = "$resourcePath"
-      status         = "$status"
-      error.message  = "$error.message"
+      requestId           = "$requestId"
+      ip                  = "$requestId"
+      caller              = "$context.identity.caller"
+      user                = "$context.identity.user"
+      requestTime         = "$requestTime"
+      httpMethod          = "$httpMethod"
+      resourcePath        = "$resourcePath"
+      status              = "$status"
+      error.message       = "$error.message"
       error.messageString = "$error.messageString"
-      responseLength = "$responseLength"
+      responseLength      = "$responseLength"
     })
   }
 
