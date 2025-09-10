@@ -276,17 +276,17 @@ resource "aws_api_gateway_stage" "main" {
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway_logs.arn
     format = jsonencode({
-      requestId           = "$requestId"
-      ip                  = "$requestId"
-      caller              = "$context.identity.caller"
-      user                = "$context.identity.user"
-      requestTime         = "$requestTime"
-      httpMethod          = "$httpMethod"
-      resourcePath        = "$resourcePath"
-      status              = "$status"
-      error.message       = "$error.message"
-      error.messageString = "$error.messageString"
-      responseLength      = "$responseLength"
+      requestId      = "$requestId"
+      ip             = "$requestId"
+      caller         = "$context.identity.caller"
+      user           = "$context.identity.user"
+      requestTime    = "$requestTime"
+      httpMethod     = "$httpMethod"
+      resourcePath   = "$resourcePath"
+      status         = "$status"
+      errorMessage   = "$error.message"
+      errorString    = "$error.messageString"
+      responseLength = "$responseLength"
     })
   }
 
