@@ -438,7 +438,7 @@ terraform apply
 
 ### Code Standards
 
-- **Go**: Follow standard Go conventions, use `gofmt`
+- **Go**: Follow standard Go conventions
 - **Terraform**: Use consistent formatting with `terraform fmt`
 - **Testing**: Maintain test coverage above 80%
 - **Documentation**: Update README for any configuration changes

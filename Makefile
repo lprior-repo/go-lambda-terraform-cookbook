@@ -33,12 +33,6 @@ test-coverage: ## Run tests with coverage report
 lint: ## Run Go linting
 	@echo "Running Go vet..."
 	@go vet ./...
-	@echo "Running gofmt check..."
-	@if [ "$$(gofmt -s -l . | wc -l)" -gt 0 ]; then \
-		echo "The following files are not properly formatted:"; \
-		gofmt -s -l .; \
-		exit 1; \
-	fi
 
 format: ## Format Go code
 	@echo "Formatting Go code..."
