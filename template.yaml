@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Go Lambda Terraform Cookbook - SAM template for local development only'
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: provided.al2023
+    Architecture: arm64
+    Environment:
+      Variables:
+        GOLANG_VERSION: '1.25'
+
+Resources:
+  GoLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architecture: arm64
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        RootApi:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+    Metadata:
+      BuildMethod: go1.x
+      BuildProperties:
+        Binary: bootstrap
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway endpoint URL for local development"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  
+  FunctionName:
+    Description: "Lambda Function Name"
+    Value: !Ref GoLambdaFunction

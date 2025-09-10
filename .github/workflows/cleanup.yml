@@ -1,0 +1,212 @@
+name: Cleanup Ephemeral Environments
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    # Run daily at 2 AM UTC to clean up any orphaned resources
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to clean up (leave empty for PR cleanup)'
+        required: false
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: '1.13.1'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  cleanup-pr-environment:
+    name: Cleanup PR Environment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          role-session-name: GitHubActions-Cleanup-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Generate PR environment name
+        id: env-name
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          ENV_NAME="pr-${PR_NUMBER}"
+          echo "environment=${ENV_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Check if workspace exists
+        id: workspace-check
+        working-directory: ./terraform
+        run: |
+          if terraform workspace list | grep -q "${{ steps.env-name.outputs.environment }}"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Destroy PR environment
+        if: steps.workspace-check.outputs.exists == 'true'
+        working-directory: ./terraform
+        run: |
+          terraform workspace select ${{ steps.env-name.outputs.environment }}
+          terraform destroy -auto-approve \
+            -var="environment=${{ steps.env-name.outputs.environment }}" \
+            -var="aws_region=${{ env.AWS_REGION }}"
+          
+          # Delete the workspace
+          terraform workspace select default
+          terraform workspace delete ${{ steps.env-name.outputs.environment }}
+
+      - name: Comment on PR
+        if: steps.workspace-check.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🧹 **Environment Cleanup Complete**\n\nThe ephemeral environment `${{ steps.env-name.outputs.environment }}` has been successfully destroyed and cleaned up.'
+            });
+
+  cleanup-orphaned-resources:
+    name: Cleanup Orphaned Resources
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          role-session-name: GitHubActions-OrphanCleanup-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Find orphaned PR environments
+        id: find-orphans
+        run: |
+          # Get list of open PRs
+          OPEN_PRS=$(gh pr list --state open --json number --jq '.[].number' | tr '\n' ' ')
+          echo "Open PRs: $OPEN_PRS"
+          
+          # Get list of Terraform workspaces that start with "pr-"
+          cd terraform
+          terraform init
+          PR_WORKSPACES=$(terraform workspace list | grep "pr-" | sed 's/*//' | xargs)
+          echo "PR workspaces: $PR_WORKSPACES"
+          
+          # Find orphaned workspaces
+          ORPHANED=""
+          for workspace in $PR_WORKSPACES; do
+            PR_NUM=${workspace#pr-}
+            if [[ ! " $OPEN_PRS " =~ " $PR_NUM " ]]; then
+              ORPHANED="$ORPHANED $workspace"
+            fi
+          done
+          
+          echo "Orphaned workspaces: $ORPHANED"
+          echo "orphaned=$ORPHANED" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Cleanup orphaned environments
+        if: steps.find-orphans.outputs.orphaned != ''
+        working-directory: ./terraform
+        run: |
+          for workspace in ${{ steps.find-orphans.outputs.orphaned }}; do
+            echo "Cleaning up orphaned workspace: $workspace"
+            
+            terraform workspace select $workspace
+            terraform destroy -auto-approve \
+              -var="environment=$workspace" \
+              -var="aws_region=${{ env.AWS_REGION }}" || true
+            
+            # Delete the workspace
+            terraform workspace select default
+            terraform workspace delete $workspace || true
+          done
+
+      - name: Create cleanup summary
+        if: steps.find-orphans.outputs.orphaned != ''
+        run: |
+          echo "## 🧹 Orphaned Environment Cleanup" >> $GITHUB_STEP_SUMMARY
+          echo "The following orphaned environments were cleaned up:" >> $GITHUB_STEP_SUMMARY
+          for workspace in ${{ steps.find-orphans.outputs.orphaned }}; do
+            echo "- $workspace" >> $GITHUB_STEP_SUMMARY
+          done
+
+  manual-cleanup:
+    name: Manual Environment Cleanup
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment != ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          role-session-name: GitHubActions-ManualCleanup-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Destroy specified environment
+        working-directory: ./terraform
+        run: |
+          terraform workspace select ${{ github.event.inputs.environment }}
+          terraform destroy -auto-approve \
+            -var="environment=${{ github.event.inputs.environment }}" \
+            -var="aws_region=${{ env.AWS_REGION }}"
+          
+          # Delete the workspace if it's not a permanent environment
+          if [[ "${{ github.event.inputs.environment }}" != "dev" && "${{ github.event.inputs.environment }}" != "staging" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
+            terraform workspace select default
+            terraform workspace delete ${{ github.event.inputs.environment }}
+          fi
+
+      - name: Cleanup summary
+        run: |
+          echo "## 🧹 Manual Environment Cleanup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Environment **${{ github.event.inputs.environment }}** has been successfully destroyed." >> $GITHUB_STEP_SUMMARY

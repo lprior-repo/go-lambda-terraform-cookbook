@@ -1,0 +1,23 @@
+# Example Terraform variables file
+# Copy this file to terraform.tfvars and customize for your environment
+
+aws_region    = "us-east-1"
+project_name  = "go-lambda-cookbook"
+environment   = "dev"
+
+# Lambda Configuration
+lambda_timeout     = 30
+lambda_memory_size = 512
+
+# Logging Configuration
+log_retention_days = 14
+log_level         = "INFO"
+
+# API Gateway Configuration
+api_gateway_stage_name = "prod"
+
+# Environment Variables for Lambda Function
+lambda_environment_variables = {
+  # Add your custom environment variables here
+  # CUSTOM_VAR = "value"
+}

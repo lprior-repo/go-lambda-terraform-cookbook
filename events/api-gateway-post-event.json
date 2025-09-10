@@ -1,0 +1,68 @@
+{
+  "resource": "/api/test",
+  "path": "/api/test",
+  "httpMethod": "POST",
+  "headers": {
+    "Accept": "application/json",
+    "Accept-Encoding": "gzip, deflate",
+    "Content-Type": "application/json",
+    "Host": "example.execute-api.us-east-1.amazonaws.com",
+    "User-Agent": "curl/7.68.0",
+    "X-Amz-Trace-Id": "Root=1-58b75f84-f2e0a7c6b8d7f8a9c0d1e2f3"
+  },
+  "multiValueHeaders": {
+    "Accept": [
+      "application/json"
+    ],
+    "Accept-Encoding": [
+      "gzip, deflate"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "Host": [
+      "example.execute-api.us-east-1.amazonaws.com"
+    ],
+    "User-Agent": [
+      "curl/7.68.0"
+    ],
+    "X-Amz-Trace-Id": [
+      "Root=1-58b75f84-f2e0a7c6b8d7f8a9c0d1e2f3"
+    ]
+  },
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "requestTime": "09/Apr/2015:12:34:56 +0000",
+    "requestTimeEpoch": 1428582896000,
+    "requestId": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef",
+    "protocol": "HTTP/1.1",
+    "resourceId": "123456",
+    "stage": "prod",
+    "resourcePath": "/api/test",
+    "httpMethod": "POST",
+    "apiId": "1234567890",
+    "path": "/prod/api/test",
+    "accountId": "123456789012",
+    "identity": {
+      "accessKey": null,
+      "accountId": null,
+      "apiKey": null,
+      "apiKeyId": null,
+      "caller": null,
+      "cognitoAuthenticationProvider": null,
+      "cognitoAuthenticationType": null,
+      "cognitoIdentityId": null,
+      "cognitoIdentityPoolId": null,
+      "principalOrgId": null,
+      "sourceIp": "127.0.0.1",
+      "user": null,
+      "userAgent": "curl/7.68.0",
+      "userArn": null
+    }
+  },
+  "body": "{\"message\":\"Hello from API Gateway POST\",\"data\":{\"key\":\"value\",\"number\":42}}",
+  "isBase64Encoded": false
+}

@@ -1,0 +1,274 @@
+name: Deploy Lambda Function
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  AWS_REGION: us-east-1
+  GO_VERSION: '1.25'
+  TERRAFORM_VERSION: '1.13.1'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    name: Test Go Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run gofmt check
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "The following files are not properly formatted:"
+            gofmt -s -l .
+            exit 1
+          fi
+
+  build:
+    name: Build Lambda Binary
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Lambda binary
+        run: |
+          mkdir -p build
+          cd src
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ../build/bootstrap .
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: lambda-binary
+          path: build/bootstrap
+          retention-days: 1
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+        include:
+          - environment: dev
+            branch: develop
+          - environment: staging  
+            branch: main
+          - environment: prod
+            branch: main
+    # Only run for matching branch-environment combinations
+    if: |
+      (matrix.environment == 'dev' && github.ref == 'refs/heads/develop') ||
+      (matrix.environment == 'staging' && github.ref == 'refs/heads/main') ||
+      (matrix.environment == 'prod' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'pull_request'
+
+    outputs:
+      tfplan-dev: ${{ steps.plan-dev.outputs.stdout }}
+      tfplan-staging: ${{ steps.plan-staging.outputs.stdout }}
+      tfplan-prod: ${{ steps.plan-prod.outputs.stdout }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: lambda-binary
+          path: build/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets[format('AWS_ROLE_ARN_{0}', upper(matrix.environment))] }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Terraform Workspace
+        working-directory: ./terraform
+        run: |
+          terraform workspace select ${{ matrix.environment }} || terraform workspace new ${{ matrix.environment }}
+
+      - name: Terraform Plan
+        id: plan-${{ matrix.environment }}
+        working-directory: ./terraform
+        run: |
+          terraform plan \
+            -var="environment=${{ matrix.environment }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -out=tfplan-${{ matrix.environment }}
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v5
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: terraform/tfplan-${{ matrix.environment }}
+          retention-days: 1
+
+      - name: Comment PR with Terraform Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { stdout } = ${{ steps[format('plan-{0}', matrix.environment)].outputs }};
+            
+            const comment = `## Terraform Plan Results - ${{ matrix.environment }}
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${stdout}
+            \`\`\`
+            
+            </details>
+            
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+        include:
+          - environment: dev
+            branch: develop
+          - environment: staging
+            branch: main  
+          - environment: prod
+            branch: main
+    # Only run for matching branch-environment combinations
+    if: |
+      (matrix.environment == 'dev' && github.ref == 'refs/heads/develop') ||
+      (matrix.environment == 'staging' && github.ref == 'refs/heads/main') ||
+      (matrix.environment == 'prod' && github.ref == 'refs/heads/main')
+
+    environment:
+      name: ${{ matrix.environment }}
+      url: ${{ steps.terraform-output.outputs.api_gateway_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: lambda-binary
+          path: build/
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v5
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: terraform/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets[format('AWS_ROLE_ARN_{0}', upper(matrix.environment))] }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Terraform Workspace
+        working-directory: ./terraform
+        run: |
+          terraform workspace select ${{ matrix.environment }} || terraform workspace new ${{ matrix.environment }}
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply tfplan-${{ matrix.environment }}
+
+      - name: Get Terraform Outputs
+        id: terraform-output
+        working-directory: ./terraform
+        run: |
+          echo "api_gateway_url=$(terraform output -raw api_gateway_url)" >> $GITHUB_OUTPUT
+          echo "lambda_function_name=$(terraform output -raw lambda_function_name)" >> $GITHUB_OUTPUT
+
+      - name: Test deployed endpoint
+        run: |
+          echo "Testing endpoint: ${{ steps.terraform-output.outputs.api_gateway_url }}"
+          curl -f ${{ steps.terraform-output.outputs.api_gateway_url }} || exit 1
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Successful - ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Gateway URL**: ${{ steps.terraform-output.outputs.api_gateway_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Lambda Function**: ${{ steps.terraform-output.outputs.lambda_function_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
